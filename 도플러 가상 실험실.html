@@ -1,0 +1,870 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>도플러 가상 실험실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-column workbench. Scene + phone readout on top, record table in the middle, chart beside the verdict at the bottom.
+   Color is semantic: blue = source approaching (frequency up), orange = source receding (frequency down), grey = at rest. */
+:root{
+  --font-body:'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --bg:#ECEFF2; --panel:#FFFFFF; --ink:#12202B; --muted:#52636F; --line:#CAD3DA; --soft:#E4EAEF;
+  --stage:#F4F7F9; --track:#B5C0C9;
+  --accent:#1B5BD1; --on-accent:#FFFFFF;
+  --approach:#1B5BD1; --recede:#C25A0B; --rest:#5B6A76;
+  --good:#16704A; --good-bg:#E1F2E8; --warn:#8F5A00; --warn-bg:#FAEFD6; --bad:#A92F1D; --bad-bg:#FADFDA;
+  --screen:#0D1822; --screen-ink:#E4EEF4; --screen-dim:#7D95A5; --screen-peak:#8DC1FF;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E151B; --panel:#151F27; --ink:#E5EDF3; --muted:#9AAAB7; --line:#2A3945; --soft:#1C2833;
+    --stage:#101A22; --track:#3A4B58;
+    --accent:#6BA3FF; --on-accent:#0B1522;
+    --approach:#6BA3FF; --recede:#FF9B4A; --rest:#93A3B0;
+    --good:#5FD39C; --good-bg:#12301F; --warn:#F0BC5E; --warn-bg:#33270E; --bad:#FF8B7A; --bad-bg:#3A1812;
+    --screen:#0A1219; --screen-ink:#E4EEF4; --screen-dim:#7D95A5; --screen-peak:#8DC1FF;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E151B; --panel:#151F27; --ink:#E5EDF3; --muted:#9AAAB7; --line:#2A3945; --soft:#1C2833;
+  --stage:#101A22; --track:#3A4B58;
+  --accent:#6BA3FF; --on-accent:#0B1522;
+  --approach:#6BA3FF; --recede:#FF9B4A; --rest:#93A3B0;
+  --good:#5FD39C; --good-bg:#12301F; --warn:#F0BC5E; --warn-bg:#33270E; --bad:#FF8B7A; --bad-bg:#3A1812;
+  --screen:#0A1219; --screen-ink:#E4EEF4; --screen-dim:#7D95A5; --screen-peak:#8DC1FF;
+  color-scheme:dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:15px; line-height:1.6;
+  word-break:keep-all; overflow-wrap:break-word; -webkit-text-size-adjust:100%;
+  padding-block:20px 56px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.eyebrow{margin:0;font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{margin:4px 0 6px;font-size:clamp(24px,4.6vw,34px);line-height:1.2;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+.lede{margin:0;max-width:62ch;color:var(--muted)}
+h2{margin:0;font-size:17px;font-weight:600;line-height:1.3}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+.sub{margin:0;font-size:13px;color:var(--muted)}
+
+/* design summary */
+details.design{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 18px}
+details.design>summary{cursor:pointer;font-weight:600}
+.defs{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px 16px;margin:14px 0 0}
+.defs dt{font-size:13px;color:var(--muted);padding-top:2px}
+.defs dd{margin:0;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--soft);padding:1px 10px;border-radius:999px;font-size:13px}
+.chip i{font-style:normal;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+
+/* scene */
+.scene-grid{display:grid;grid-template-columns:minmax(0,1fr) 264px;gap:14px;align-items:stretch}
+.stage{border:1px solid var(--line);border-radius:4px;background:var(--stage);overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.stage canvas{display:block;width:100%}
+.stage figcaption{margin:0;padding:8px 12px 10px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+.app{background:var(--screen);color:var(--screen-ink);border-radius:10px;padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.app-bar{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--screen-dim)}
+.app-bar b{font-weight:500;color:var(--screen-ink)}
+.readout{display:flex;align-items:baseline;gap:6px}
+.readout output{font:500 42px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.readout span{color:var(--screen-dim);font:400 16px var(--font-mono)}
+.app canvas{display:block;width:100%;height:96px;border-radius:4px}
+.mini{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;margin:0;font-size:12px}
+.mini dt{color:var(--screen-dim)}
+.mini dd{margin:0;text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* controls */
+.steps{margin:0;padding-left:20px;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 22px}
+.steps li{padding-left:2px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px 20px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+.grp{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lg,legend{font-size:13px;font-weight:500;padding:0;display:flex;align-items:center;gap:8px}
+.tag{font-family:var(--font-mono);font-size:11px;font-weight:400;color:var(--muted);border:1px solid var(--line);padding:0 6px;border-radius:3px}
+.seg{display:grid;grid-template-columns:1fr 1fr;position:relative}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{border:1px solid var(--line);padding:8px 10px;text-align:center;cursor:pointer;background:var(--panel);font-size:14px;min-height:40px;display:flex;align-items:center;justify-content:center}
+.seg label:first-of-type{border-radius:4px 0 0 4px}
+.seg label:last-of-type{border-radius:0 4px 4px 0;border-left:0}
+.seg input:checked+label{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:500}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.seg input:disabled+label{opacity:.55;cursor:not-allowed}
+.speedrow{display:flex;align-items:center;gap:12px}
+.speedrow input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:32px}
+.speedrow output{font-family:var(--font-mono);font-variant-numeric:tabular-nums;min-width:74px;text-align:right}
+.hint{margin:0;font-size:12px;color:var(--muted)}
+select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 8px;min-height:40px}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.btn{font:inherit;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px 14px;min-height:40px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:500}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.status{margin:0;min-height:1.6em;font-size:13px;color:var(--muted)}
+details.cond{border-top:1px solid var(--line);padding-top:12px}
+details.cond>summary{cursor:pointer;font-size:13px;font-weight:500}
+.cond-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px 18px;margin-top:12px}
+.cond p{font-size:12px;color:var(--muted);margin:12px 0 0;max-width:80ch}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;min-height:40px}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+
+/* table */
+.tscroll{overflow-x:auto;border:1px solid var(--line);border-radius:4px}
+table.data{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+table.data th,table.data td{padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+table.data tr:last-child>*{border-bottom:0}
+table.data th.rowh{position:sticky;left:0;text-align:left;background:var(--soft);font-weight:500;color:var(--muted);font-size:13px;z-index:1;border-right:1px solid var(--line)}
+table.data thead th{font-family:var(--font-mono);font-weight:500;background:var(--panel)}
+table.data thead th.rowh{background:var(--soft)}
+table.data tr.main td{font-family:var(--font-mono);font-weight:500;font-size:15px}
+table.data td small{font-size:11px;color:var(--muted);margin-left:4px}
+.k-app{color:var(--approach)} .k-rec{color:var(--recede)} .k-rest{color:var(--rest)}
+table.data td.k-app,table.data td.k-rec,table.data td.k-rest{color:inherit}
+.dirmark{font-size:12px;font-weight:500}
+.dirmark.k-app{color:var(--approach)} .dirmark.k-rec{color:var(--recede)} .dirmark.k-rest{color:var(--rest)}
+button.x{margin-left:8px;border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:3px}
+button.x:hover{color:var(--bad)}
+.empty{margin:0;padding:22px 16px;border:1px dashed var(--line);border-radius:4px;color:var(--muted);font-size:14px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tools .msg{font-size:12px;color:var(--muted)}
+textarea.copybox{width:100%;min-height:96px;font:12px/1.5 var(--font-mono);background:var(--soft);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:8px}
+
+/* analysis */
+.analysis{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px}
+.chartbox{display:flex;flex-direction:column;gap:8px;min-width:0}
+#chart{min-width:0}
+#chart svg{display:block;width:100%}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{stroke:var(--muted);stroke-width:1}
+.chart .zero{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 4}
+.chart text{font-family:var(--font-mono);font-size:11px;fill:var(--muted)}
+.chart text.ttl{font-family:var(--font-body);font-size:12px}
+.chart .base{stroke:var(--rest);stroke-width:1.2;stroke-dasharray:5 4}
+.chart .theory{stroke:var(--accent);stroke-width:1.4;stroke-dasharray:2 3;fill:none}
+.chart .fit{stroke:var(--ink);stroke-width:1.6;fill:none}
+.chart .p-app{fill:var(--approach)} .chart .p-rec{fill:var(--recede)} .chart .p-rest{fill:var(--panel);stroke:var(--rest);stroke-width:2}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;display:inline-block}
+.sw.c{border-radius:50%;background:var(--approach)} .sw.s{background:var(--recede)} .sw.r{border-radius:50%;border:2px solid var(--rest);background:var(--panel)}
+.verdictcol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.verdict{border-radius:4px;padding:12px 14px;background:var(--soft)}
+.verdict b{display:block;font-size:16px;margin-bottom:2px}
+.verdict p{margin:0;font-size:14px}
+.verdict[data-state=good]{background:var(--good-bg);color:var(--good)}
+.verdict[data-state=warn]{background:var(--warn-bg);color:var(--warn)}
+.verdict[data-state=bad]{background:var(--bad-bg);color:var(--bad)}
+.verdict[data-state=wait]{color:var(--ink)}
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.checks li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:baseline}
+.checks .q{font-weight:500;font-size:14px;grid-column:2}
+.checks .a{font-size:13px;color:var(--muted);grid-column:2}
+.pill{grid-row:1;grid-column:1;font-size:11px;font-weight:600;padding:1px 8px;border-radius:3px;white-space:nowrap}
+.pill.ok{background:var(--good-bg);color:var(--good)} .pill.no{background:var(--bad-bg);color:var(--bad)} .pill.wait{background:var(--soft);color:var(--muted)}
+.reg{margin:0;font-size:13px;color:var(--muted)}
+.reg code{font-family:var(--font-mono);color:var(--ink)}
+
+@media (max-width:820px){
+  .scene-grid,.analysis{grid-template-columns:minmax(0,1fr)}
+  .app{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 16px}
+  .app-bar,.app canvas{grid-column:1 / -1}
+}
+@media (max-width:520px){
+  .panel{padding:14px}
+  .defs{grid-template-columns:minmax(0,1fr);gap:2px}
+  .defs dd{margin-bottom:10px}
+  .app{grid-template-columns:minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<main class="wrap">
+  <header>
+    <p class="eyebrow">물리 실험 · 소리의 도플러 효과</p>
+    <h1>도플러 효과 가상 실험실</h1>
+    <p class="lede">스피커 수레의 이동 속도를 바꿔 가며 휴대폰이 읽는 진동수를 측정하고, 세운 가설이 맞는지 표와 그래프로 확인합니다.</p>
+  </header>
+
+  <details class="design" open>
+    <summary>실험 설계 (입력하신 내용)</summary>
+    <dl class="defs">
+      <dt>가설</dt>
+      <dd>음원(스피커)이 관측자(휴대폰)에게 다가올 때는 정지해 있을 때보다 높은 진동수가, 멀어질 때는 낮은 진동수가 측정될 것이다. 진동수의 차이는 이동 속도에 비례할 것이다.</dd>
+      <dt>조작변인</dt>
+      <dd>음원의 이동 속도</dd>
+      <dt>종속변인</dt>
+      <dd>측정 진동수</dd>
+      <dt>통제변인</dt>
+      <dd>
+        <div class="chips">
+          <span class="chip">음원 기본 진동수 <i>200 Hz</i></span>
+          <span class="chip">이동 경로 <i>7 m</i></span>
+          <span class="chip">배경 소음</span>
+          <span class="chip">휴대폰 위치·방향</span>
+          <span class="chip">스피커 소리 크기</span>
+        </div>
+      </dd>
+    </dl>
+  </details>
+
+  <section class="panel" aria-labelledby="h-scene">
+    <div class="panel-head">
+      <h2 id="h-scene">실험 장면</h2>
+      <p class="sub">휴대폰은 고정, 수레는 휴대폰과 같은 직선 위를 7 m 이동</p>
+    </div>
+
+    <div class="scene-grid">
+      <figure class="stage" id="stage" style="margin:0">
+        <canvas id="scene" role="img" aria-label="휴대폰과 스피커 수레가 놓인 7미터 트랙. 수레가 움직이면 소리 파면이 퍼져 나가는 모습을 보여 줍니다."></canvas>
+        <figcaption>파면 간격은 효과가 눈에 보이도록 과장한 개념도입니다. 화살표는 수레의 진행 방향이고, 파랑은 가까워짐, 주황은 멀어짐입니다.</figcaption>
+      </figure>
+
+      <aside class="app" aria-label="주파수 측정 앱">
+        <div class="app-bar"><b>주파수 측정 앱</b><span id="appState">대기</span></div>
+        <div class="readout"><output id="fReadout" aria-label="현재 측정 진동수">200.0</output><span>Hz</span></div>
+        <canvas id="spec" aria-hidden="true"></canvas>
+        <dl class="mini">
+          <dt>스톱워치</dt><dd id="watch">0.00 s</dd>
+          <dt>수레 위치</dt><dd id="pos">7.00 m</dd>
+          <dt>음원 설정</dt><dd>200 Hz 고정</dd>
+        </dl>
+      </aside>
+    </div>
+
+    <ol class="steps">
+      <li>정지 상태를 먼저 측정</li>
+      <li>방향과 속도를 정해 실험 시작</li>
+      <li>속도를 바꿔 반복</li>
+      <li>아래 표·그래프 확인</li>
+    </ol>
+
+    <div class="controls">
+      <fieldset class="grp">
+        <legend>수레 이동 방향</legend>
+        <div class="seg">
+          <input type="radio" name="dir" id="dirApp" value="-1" checked>
+          <label for="dirApp">가까워짐 (−)</label>
+          <input type="radio" name="dir" id="dirRec" value="1">
+          <label for="dirRec">멀어짐 (+)</label>
+        </div>
+      </fieldset>
+
+      <div class="grp">
+        <label class="lg" for="speed">음원 이동 속도 <span class="tag">조작변인</span></label>
+        <div class="speedrow">
+          <input type="range" id="speed" min="0.1" max="3" step="0.05" value="0.5">
+          <output id="speedVal" for="speed">0.50 m/s</output>
+        </div>
+        <p class="hint" id="hint" hidden></p>
+      </div>
+
+      <div class="grp">
+        <label class="lg" for="rate">재생 속도</label>
+        <select id="rate">
+          <option value="1">1배속 (실제 시간)</option>
+          <option value="4" selected>4배속</option>
+          <option value="12">12배속</option>
+          <option value="instant">즉시 측정</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="startBtn" type="button">실험 시작</button>
+      <button class="btn" id="baseBtn" type="button">정지 상태 측정</button>
+      <button class="btn" id="batchBtn" type="button">5개 속도 × 양방향 한 번에 측정</button>
+    </div>
+    <p class="status" id="status" aria-live="polite">먼저 “정지 상태 측정”으로 기준 진동수를 재 보세요.</p>
+
+    <details class="cond">
+      <summary>측정 조건과 시뮬레이션 가정</summary>
+      <div class="cond-grid">
+        <div class="grp">
+          <label class="lg" for="res">앱 표시 분해능</label>
+          <select id="res">
+            <option value="0.01">0.01 Hz</option>
+            <option value="0.1" selected>0.1 Hz</option>
+            <option value="0.5">0.5 Hz</option>
+            <option value="1">1 Hz</option>
+          </select>
+        </div>
+        <div class="grp">
+          <label class="lg" for="sigma">측정 잡음 (표준편차)</label>
+          <select id="sigma">
+            <option value="0">없음</option>
+            <option value="0.02">0.02 Hz</option>
+            <option value="0.05" selected>0.05 Hz</option>
+            <option value="0.1">0.1 Hz</option>
+            <option value="0.3">0.3 Hz</option>
+          </select>
+        </div>
+        <div class="grp">
+          <label class="lg" for="sigt">스톱워치 반응 오차</label>
+          <select id="sigt">
+            <option value="0">없음</option>
+            <option value="0.05">0.05 s</option>
+            <option value="0.1" selected>0.1 s</option>
+            <option value="0.2">0.2 s</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="theory"> 이론값 보기</label>
+      </div>
+      <p>설정을 바꾸면 이후 측정부터 적용됩니다. 조건을 비교하려면 표를 비우고 다시 측정하세요. 이 가상환경은 음속 343 m/s(20 ℃), 음원과 휴대폰이 한 직선 위에 있는 경우, 출발 후 0.1초에 정해진 속도에 도달하는 수레를 가정합니다. 표의 속도는 7 m를 이동한 시간을 스톱워치로 재어 계산한 값이어서 모터 설정 속도와 조금 다를 수 있습니다.</p>
+    </details>
+  </section>
+
+  <section class="panel" aria-labelledby="h-table">
+    <div class="panel-head">
+      <h2 id="h-table">측정 기록표</h2>
+      <p class="sub">가로: 음원 이동 속도 (멀어짐 +, 가까워짐 −) · 세로: 측정 진동수</p>
+    </div>
+    <div id="tableHost"></div>
+    <div class="tools">
+      <button class="btn" id="copyBtn" type="button">표 복사</button>
+      <button class="btn" id="clearBtn" type="button">표 비우기</button>
+      <span class="msg" id="copyMsg" aria-live="polite"></span>
+    </div>
+    <textarea class="copybox" id="copybox" readonly hidden aria-label="복사할 표 내용"></textarea>
+  </section>
+
+  <section class="panel" aria-labelledby="h-analysis">
+    <div class="panel-head">
+      <h2 id="h-analysis">그래프와 가설 검증</h2>
+      <p class="sub">판단 기준은 정지 기준과의 차이가 측정 오차의 3배보다 큰지, 속도와의 선형 관계가 있는지입니다.</p>
+    </div>
+    <div class="analysis">
+      <div class="chartbox">
+        <div id="chart" class="chart"></div>
+        <div class="legend">
+          <span><i class="sw r"></i>정지</span>
+          <span><i class="sw c"></i>가까워짐</span>
+          <span><i class="sw s"></i>멀어짐</span>
+        </div>
+      </div>
+      <div class="verdictcol">
+        <div class="verdict" id="verdict" data-state="wait" aria-live="polite"><b>측정 진행 중</b><p>정지 상태 측정부터 시작하세요.</p></div>
+        <ul class="checks" id="checks"></ul>
+        <p class="reg" id="regText"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+'use strict';
+var F0=200, C=343, L=7, RAMP=0.1, DT=0.1, SUB=0.05, REST_T=5, MINUS='−';
+
+function $(id){return document.getElementById(id);}
+function gauss(){var u=0,v=Math.random();while(u===0)u=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function num(id){return parseFloat($(id).value);}
+function res(){return num('res');}
+function sigma(){return num('sigma');}
+function sigT(){return num('sigt');}
+function decs(r){return r>=1?0:(r>=0.1?1:2);}
+function fx(n,d){return n.toFixed(d).replace('-',MINUS);}
+function sv(n,d){if(Math.abs(n)<Math.pow(10,-d)/2)return (0).toFixed(d);return (n>0?'+':MINUS)+Math.abs(n).toFixed(d);}
+function mean(a){var s=0,i;for(i=0;i<a.length;i++)s+=a[i];return a.length?s/a.length:0;}
+function fTheory(vs){return F0*C/(C+vs);}
+
+/* ---------- state ---------- */
+var S={dir:-1,v:0.5,xm:L,vs:0,reading:F0,run:null,recs:[],uid:0,watch:0,rings:[],emitAcc:0,idleAcc:0};
+var col={};
+var sceneW=0,sceneH=0,specW=0,specH=96;
+var cv=$('scene'),ctx=cv.getContext?cv.getContext('2d'):null;
+var sc=$('spec'),sctx=sc.getContext?sc.getContext('2d'):null;
+var stage=$('stage');
+
+function readColors(){
+  var cs=getComputedStyle(document.documentElement);
+  ['stage','panel','ink','muted','line','track','approach','recede','rest','accent','screen','screen-ink','screen-dim','screen-peak'].forEach(function(k){
+    col[k]=cs.getPropertyValue('--'+k).trim()||'#888';
+  });
+}
+
+/* ---------- physics ---------- */
+function readFreq(vs){
+  var f=fTheory(vs)+gauss()*sigma(), r=res();
+  return Math.round(f/r)*r;
+}
+function makeRun(type,dir,v){
+  return {type:type,dir:dir,vSet:v,t:0,traveled:0,acc:0,samples:[],tEnd:null,done:false};
+}
+function sampleOnce(r){
+  S.reading=readFreq(S.vs);
+  var steady=r.type==='run'?(r.t>=0.3&&r.traveled>=0.4&&r.traveled<=L-0.4):(r.t>=0.5);
+  if(steady)r.samples.push(S.reading);
+}
+function step(r,d,visual){
+  r.t+=d;
+  var vcur=0;
+  if(r.type==='run'){
+    vcur=r.vSet*Math.min(1,r.t/RAMP);
+    var dist=vcur*d;
+    if(r.traveled+dist>=L){
+      r.tEnd=r.t-(r.traveled+dist-L)/Math.max(vcur,1e-9);
+      r.traveled=L; r.done=true;
+    }else{r.traveled+=dist;}
+    S.xm=r.dir>0?r.traveled:L-r.traveled;
+    S.vs=r.dir*vcur;
+  }else{
+    S.xm=L; S.vs=0;
+    if(r.t>=REST_T){r.done=true;r.tEnd=r.t;}
+  }
+  r.acc+=d;
+  while(r.acc>=DT-1e-9){r.acc-=DT;sampleOnce(r);}
+  if(visual)updateRings(d);
+}
+function advance(r,dt,visual){
+  var left=dt;
+  while(left>1e-9&&!r.done){var d=Math.min(SUB,left);step(r,d,visual);left-=d;}
+}
+function finalize(r){
+  var n,m,s=0,i,sd,se,tm,rec;
+  if(!r.samples.length)r.samples.push(S.reading);
+  n=r.samples.length; m=mean(r.samples);
+  for(i=0;i<n;i++)s+=Math.pow(r.samples[i]-m,2);
+  sd=n>1?Math.sqrt(s/(n-1)):0;
+  se=Math.max(sd/Math.sqrt(n),0.29*res()/Math.sqrt(n));
+  tm=r.type==='run'?Math.max(0.2,r.tEnd+gauss()*sigT()):null;
+  rec={id:++S.uid,type:r.type,dir:r.type==='run'?r.dir:0,vSet:r.type==='run'?r.vSet:0,
+       t:tm,v:r.type==='run'?r.dir*L/tm:0,f:m,se:se,n:n};
+  S.recs.push(rec);
+  S.watch=r.type==='run'?tm:REST_T;
+  S.run=null; S.vs=0;
+  return rec;
+}
+function runInstant(r){
+  var g=0;
+  while(!r.done&&g++<200000)step(r,SUB,false);
+  return finalize(r);
+}
+
+/* ---------- analysis ---------- */
+function linreg(p){
+  var n=p.length,sx=0,sy=0,sxx=0,sxy=0,syy=0,i,x,y;
+  for(i=0;i<n;i++){x=p[i][0];y=p[i][1];sx+=x;sy+=y;sxx+=x*x;sxy+=x*y;syy+=y*y;}
+  var Sxx=sxx-sx*sx/n,Sxy=sxy-sx*sy/n,Syy=syy-sy*sy/n;
+  if(n<3||Sxx<=1e-12)return null;
+  var b=Sxy/Sxx,a=(sy-b*sx)/n,sse=Math.max(0,Syy-b*Sxy);
+  var r2=Syy>1e-12?1-sse/Syy:1;
+  var se=Math.sqrt((sse/(n-2))/Sxx);
+  var t=se>0?b/se:(b===0?0:(b>0?Infinity:-Infinity));
+  return {a:a,b:b,r2:r2,se:se,t:t,n:n};
+}
+function analyze(){
+  var rests=S.recs.filter(function(r){return r.type==='rest';});
+  var runs=S.recs.filter(function(r){return r.type==='run';});
+  var out={nRest:rests.length,nRuns:runs.length,nApp:0,nRec:0,cApp:0,cRec:0,bad:0,items:{},reg:null,base:null};
+  if(!rests.length)return out;
+  var base=mean(rests.map(function(r){return r.f;}));
+  var se0=Math.sqrt(rests.reduce(function(a,r){return a+r.se*r.se;},0))/rests.length;
+  out.base=base; out.baseSe=se0;
+  runs.forEach(function(r){
+    var d=r.f-base,sd=Math.sqrt(r.se*r.se+se0*se0);
+    var sig=Math.abs(d)>3*sd,exp=r.dir<0?1:-1;
+    var ok=sig&&((d>0)?1:-1)===exp,bad=sig&&!ok;
+    out.items[r.id]={d:d,sd:sd,sig:sig,ok:ok};
+    if(r.dir<0){out.nApp++;if(ok)out.cApp++;}else{out.nRec++;if(ok)out.cRec++;}
+    if(bad)out.bad++;
+  });
+  if(runs.length>=4){
+    out.reg=linreg(S.recs.map(function(r){return [r.v,r.f];}));
+  }
+  return out;
+}
+
+/* ---------- table ---------- */
+function cls(r){return r.type==='rest'?'k-rest':(r.dir<0?'k-app':'k-rec');}
+function dirText(r){return r.type==='rest'?'정지':(r.dir<0?'가까워짐':'멀어짐');}
+function renderTable(){
+  var host=$('tableHost');
+  if(!S.recs.length){
+    host.innerHTML='<p class="empty">아직 측정값이 없습니다. “정지 상태 측정”으로 기준 진동수를 잰 뒤, 방향과 속도를 바꿔 가며 측정하면 이곳에 속도별 열이 쌓입니다.</p>';
+    return;
+  }
+  var an=analyze(),th2=$('theory').checked;
+  var cols=S.recs.slice().sort(function(a,b){return a.v-b.v||a.id-b.id;});
+  var h='<div class="tscroll"><table class="data"><caption class="sr">음원 이동 속도별 측정 진동수</caption><thead><tr><th scope="row" class="rowh">음원 이동 속도 (m/s)</th>';
+  cols.forEach(function(r){h+='<th scope="col" class="'+cls(r)+'">'+sv(r.v,2)+'<button class="x" type="button" data-del="'+r.id+'" aria-label="이 측정 삭제">×</button></th>';});
+  h+='</tr></thead><tbody>';
+  h+='<tr><th scope="row" class="rowh">이동 방향</th>'+cols.map(function(r){return '<td><span class="dirmark '+cls(r)+'">'+dirText(r)+'</span></td>';}).join('')+'</tr>';
+  h+='<tr><th scope="row" class="rowh">이동 시간 (s)</th>'+cols.map(function(r){return '<td>'+(r.type==='run'?r.t.toFixed(2):'—')+'</td>';}).join('')+'</tr>';
+  h+='<tr class="main"><th scope="row" class="rowh">측정 진동수 (Hz)</th>'+cols.map(function(r){return '<td>'+r.f.toFixed(2)+'<small>±'+r.se.toFixed(2)+'</small></td>';}).join('')+'</tr>';
+  h+='<tr><th scope="row" class="rowh">정지 기준과의 차이 (Hz)</th>'+cols.map(function(r){return '<td>'+(an.base!==null?sv(r.f-an.base,2):'—')+'</td>';}).join('')+'</tr>';
+  if(th2)h+='<tr><th scope="row" class="rowh">이론 진동수 (Hz)</th>'+cols.map(function(r){return '<td>'+fTheory(r.v).toFixed(2)+'</td>';}).join('')+'</tr>';
+  h+='</tbody></table></div>';
+  host.innerHTML=h;
+}
+function tsv(){
+  var cols=S.recs.slice().sort(function(a,b){return a.v-b.v||a.id-b.id;});
+  var an=analyze();
+  var rows=[
+    ['음원 이동 속도 (m/s)'].concat(cols.map(function(r){return sv(r.v,2);})),
+    ['이동 방향'].concat(cols.map(dirText)),
+    ['이동 시간 (s)'].concat(cols.map(function(r){return r.type==='run'?r.t.toFixed(2):'';})),
+    ['측정 진동수 (Hz)'].concat(cols.map(function(r){return r.f.toFixed(2);})),
+    ['정지 기준과의 차이 (Hz)'].concat(cols.map(function(r){return an.base!==null?sv(r.f-an.base,2):'';}))
+  ];
+  return rows.map(function(r){return r.join('\t');}).join('\n');
+}
+
+/* ---------- chart ---------- */
+function niceStep(raw){
+  var p=Math.pow(10,Math.floor(Math.log(raw)/Math.LN10)),n=raw/p;
+  return (n<1.5?1:(n<3?2:(n<7?5:10)))*p;
+}
+function renderChart(){
+  var host=$('chart');
+  var W=Math.max(300,Math.floor(host.clientWidth||600));
+  var H=Math.round(Math.min(380,Math.max(270,W*0.58)));
+  var ml=58,mr=14,mt=28,mb=48,pw=W-ml-mr,ph=H-mt-mb;
+  var recs=S.recs,i,maxV=0;
+  recs.forEach(function(r){maxV=Math.max(maxV,Math.abs(r.v));});
+  var xr=Math.max(1,Math.ceil(maxV*1.15*2)/2);
+  var th2=$('theory').checked,an=analyze();
+  var ys=[];
+  recs.forEach(function(r){ys.push(r.f);});
+  if(th2){ys.push(fTheory(-xr),fTheory(xr));}
+  if(!ys.length)ys=[F0-0.5,F0+0.5];
+  var ymin=Math.min.apply(null,ys),ymax=Math.max.apply(null,ys);
+  if(ymax-ymin<0.4){var mid=(ymin+ymax)/2;ymin=mid-0.2;ymax=mid+0.2;}
+  var pad=(ymax-ymin)*0.14;ymin-=pad;ymax+=pad;
+  function X(v){return ml+(v+xr)/(2*xr)*pw;}
+  function Y(f){return mt+(ymax-f)/(ymax-ymin)*ph;}
+  var sx=niceStep(xr*2/6),sy=niceStep((ymax-ymin)/5),yd=Math.min(3,Math.max(0,-Math.floor(Math.log(sy)/Math.LN10)));
+  var s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="음원 이동 속도에 따른 측정 진동수 산점도">';
+  var t,v;
+  for(t=Math.ceil(ymin/sy)*sy;t<=ymax+1e-9;t+=sy){
+    s+='<line class="grid" x1="'+ml+'" x2="'+(ml+pw)+'" y1="'+Y(t).toFixed(1)+'" y2="'+Y(t).toFixed(1)+'"/>';
+    s+='<text x="'+(ml-8)+'" y="'+(Y(t)+4).toFixed(1)+'" text-anchor="end">'+t.toFixed(yd)+'</text>';
+  }
+  for(v=Math.ceil(-xr/sx)*sx;v<=xr+1e-9;v+=sx){
+    if(Math.abs(v)<1e-9)continue;
+    s+='<text x="'+X(v).toFixed(1)+'" y="'+(mt+ph+18)+'" text-anchor="middle">'+sv(v,sx<1?1:0)+'</text>';
+    s+='<line class="grid" x1="'+X(v).toFixed(1)+'" x2="'+X(v).toFixed(1)+'" y1="'+(mt+ph)+'" y2="'+(mt+ph+4)+'"/>';
+  }
+  s+='<line class="zero" x1="'+X(0).toFixed(1)+'" x2="'+X(0).toFixed(1)+'" y1="'+mt+'" y2="'+(mt+ph)+'"/>';
+  s+='<text x="'+X(0).toFixed(1)+'" y="'+(mt+ph+18)+'" text-anchor="middle">0</text>';
+  s+='<line class="axis" x1="'+ml+'" x2="'+ml+'" y1="'+mt+'" y2="'+(mt+ph)+'"/><line class="axis" x1="'+ml+'" x2="'+(ml+pw)+'" y1="'+(mt+ph)+'" y2="'+(mt+ph)+'"/>';
+  s+='<text class="ttl" x="'+(ml+4)+'" y="16">← 가까워짐 (−)</text><text class="ttl" x="'+(ml+pw-4)+'" y="16" text-anchor="end">멀어짐 (+) →</text>';
+  s+='<text class="ttl" x="'+(ml+pw/2)+'" y="'+(H-6)+'" text-anchor="middle">음원 이동 속도 v (m/s)</text>';
+  s+='<text class="ttl" transform="translate(14 '+(mt+ph/2)+') rotate(-90)" text-anchor="middle">측정 진동수 f (Hz)</text>';
+  if(an.base!==null&&Y(an.base)>=mt&&Y(an.base)<=mt+ph){
+    s+='<line class="base" x1="'+ml+'" x2="'+(ml+pw)+'" y1="'+Y(an.base).toFixed(1)+'" y2="'+Y(an.base).toFixed(1)+'"/>';
+    s+='<text x="'+(ml+pw-4)+'" y="'+(Y(an.base)-5).toFixed(1)+'" text-anchor="end">정지 기준 '+an.base.toFixed(2)+'</text>';
+  }
+  if(th2){
+    var d='',k;
+    for(k=0;k<=60;k++){var vv=-xr+2*xr*k/60;d+=(k?'L':'M')+X(vv).toFixed(1)+' '+Y(fTheory(vv)).toFixed(1);}
+    s+='<path class="theory" d="'+d+'"/>';
+  }
+  if(an.reg){
+    s+='<path class="fit" d="M'+X(-xr).toFixed(1)+' '+Y(an.reg.a+an.reg.b*-xr).toFixed(1)+'L'+X(xr).toFixed(1)+' '+Y(an.reg.a+an.reg.b*xr).toFixed(1)+'"/>';
+  }
+  recs.forEach(function(r){
+    var cx=X(r.v).toFixed(1),cy=Y(r.f).toFixed(1);
+    if(r.type==='rest')s+='<circle class="p-rest" cx="'+cx+'" cy="'+cy+'" r="5"/>';
+    else if(r.dir<0)s+='<circle class="p-app" cx="'+cx+'" cy="'+cy+'" r="5"/>';
+    else s+='<rect class="p-rec" x="'+(cx-4.5)+'" y="'+(cy-4.5)+'" width="9" height="9"/>';
+  });
+  if(!recs.length)s+='<text class="ttl" x="'+(ml+pw/2)+'" y="'+(mt+ph/2)+'" text-anchor="middle">측정하면 점이 찍힙니다</text>';
+  s+='</svg>';
+  host.innerHTML=s;
+}
+
+/* ---------- verdict ---------- */
+function renderAnalysis(){
+  var an=analyze(),v=$('verdict'),ck=$('checks'),rt=$('regText');
+  function pill(s){return s==='ok'?'<span class="pill ok">충족</span>':(s==='no'?'<span class="pill no">미충족</span>':'<span class="pill wait">대기</span>');}
+  function li(s,q,a){return '<li>'+pill(s)+'<span class="q">'+q+'</span><span class="a">'+a+'</span></li>';}
+  var items='',st,title,text;
+  var okApp=an.nApp>=2&&an.cApp/an.nApp>=0.8,okRec=an.nRec>=2&&an.cRec/an.nRec>=0.8;
+  var reg=an.reg,prop=!!(reg&&reg.b<0&&reg.r2>=0.9&&Math.abs(reg.t)>=3);
+
+  if(an.base===null){
+    items+=li('wait','가까워질 때 진동수가 높아진다','정지 상태 기준이 필요합니다.');
+    items+=li('wait','멀어질 때 진동수가 낮아진다','정지 상태 기준이 필요합니다.');
+  }else{
+    items+=li(an.nApp<2?'wait':(okApp?'ok':'no'),'가까워질 때 진동수가 높아진다',
+      an.nApp?('가까워짐 '+an.nApp+'회 중 '+an.cApp+'회가 기준보다 유의하게 높음'+(an.nApp<2?' (2회 이상 필요)':'')):'가까워지는 측정이 없습니다.');
+    items+=li(an.nRec<2?'wait':(okRec?'ok':'no'),'멀어질 때 진동수가 낮아진다',
+      an.nRec?('멀어짐 '+an.nRec+'회 중 '+an.cRec+'회가 기준보다 유의하게 낮음'+(an.nRec<2?' (2회 이상 필요)':'')):'멀어지는 측정이 없습니다.');
+  }
+  if(reg){
+    items+=li(prop?'ok':'no','진동수 변화가 속도에 비례한다','기울기 '+fx(reg.b,3)+' Hz per m/s, R² = '+reg.r2.toFixed(3));
+    rt.innerHTML='회귀식 <code>f = '+fx(reg.a,2)+' '+(reg.b<0?MINUS:'+')+' '+Math.abs(reg.b).toFixed(3)+'·v</code> (측정 '+reg.n+'점, 속도는 멀어짐이 +)'+
+      ($('theory').checked?'<br>이론 기울기는 '+fx(-F0/C,3)+' Hz per m/s 입니다.':'');
+  }else{
+    items+=li('wait','진동수 변화가 속도에 비례한다','속도를 바꿔 4회 이상 측정하면 직선 관계를 계산합니다.');
+    rt.textContent='';
+  }
+  ck.innerHTML=items;
+
+  if(an.base===null){
+    st='wait';title='측정 진행 중';text='정지 상태 측정부터 시작하세요.';
+  }else if(an.nApp<2||an.nRec<2){
+    st='wait';title='측정 진행 중';
+    text='가까워짐 '+an.nApp+'회, 멀어짐 '+an.nRec+'회 측정했습니다. 방향마다 속도를 바꿔 2회 이상씩 측정하세요.';
+  }else if(okApp&&okRec&&prop){
+    st='good';title='가설 지지';
+    text='가까워질 때 높아지고 멀어질 때 낮아졌으며, 속도가 클수록 변화도 선형으로 커졌습니다.';
+  }else if(okApp||okRec){
+    st='warn';title='일부만 지지';
+    var why=[];
+    if(!okApp)why.push('가까워질 때의 상승을 확인하지 못했습니다');
+    if(!okRec)why.push('멀어질 때의 하락을 확인하지 못했습니다');
+    if(!prop)why.push('속도와의 선형 관계(R² 0.9 이상, 기울기 음수)를 확인하지 못했습니다');
+    text=why.join('. ')+'. 속도를 높이거나 측정 조건을 확인해 보세요.';
+  }else{
+    st='bad';title='가설 지지 못함';
+    text=(an.bad?'기대와 반대 방향의 변화가 관측됐습니다. ':'정지 기준과 구분되는 변화를 찾지 못했습니다. ')+'변화량이 앱 분해능이나 잡음보다 작을 수 있으니 속도, 분해능, 잡음 설정을 확인해 보세요.';
+  }
+  v.setAttribute('data-state',st);
+  v.innerHTML='<b></b><p></p>';
+  v.firstChild.textContent=title; v.lastChild.textContent=text;
+}
+
+function updateHint(){
+  var h=$('hint');
+  if(!$('theory').checked){h.hidden=true;return;}
+  var d=Math.abs(fTheory(S.dir*S.v)-F0),r=res();
+  h.hidden=false;
+  h.textContent='이론상 진동수 변화 약 '+(S.dir<0?'+':MINUS)+d.toFixed(2)+' Hz, 앱 분해능 '+r+' Hz'+(d<r?' (분해능보다 작아 한 번의 값으로는 구분하기 어렵습니다)':'');
+}
+function refreshAll(){renderTable();renderAnalysis();renderChart();updateHint();}
+
+/* ---------- scene drawing ---------- */
+function visP(){
+  var g=geom(),v=(S.run&&S.run.type==='run')?S.run.vSet:0;
+  var mv=0.12+0.28*Math.min(1,v/2);
+  var cvis=g.ppm*(v>0?Math.max(1.2,v/mv):2.4);
+  var lam=Math.min(36,Math.max(20,g.ppm*0.55));
+  return {cvis:cvis,lam:lam,T:lam/cvis};
+}
+function geom(){
+  var px0=78,px1=Math.max(px0+70,sceneW-30);
+  return {px0:px0,px1:px1,ppm:(px1-px0)/L,ty:Math.round(sceneH*0.68)};
+}
+function updateRings(dt){
+  var p=visP(),maxR=sceneW*1.05,i,keep=[];
+  for(i=0;i<S.rings.length;i++){S.rings[i].r+=p.cvis*dt;if(S.rings[i].r<maxR)keep.push(S.rings[i]);}
+  S.rings=keep;
+  S.emitAcc+=dt;
+  while(S.emitAcc>=p.T){S.emitAcc-=p.T;S.rings.push({xm:S.xm,r:S.emitAcc*p.cvis});}
+}
+function setFont(px,mono){ctx.font=px+'px '+(mono?'"IBM Plex Mono",ui-monospace,monospace':'"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif');}
+function draw(){
+  if(!ctx||!sceneW)return;
+  var g=geom(),w=sceneW,h=sceneH,i,ry=g.ty-31,cx=g.px0+S.xm*g.ppm,maxR=w*1.05;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle=col.stage;ctx.fillRect(0,0,w,h);
+  ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();
+  ctx.strokeStyle=col.accent;ctx.lineWidth=1.3;
+  for(i=0;i<S.rings.length;i++){
+    var rg=S.rings[i],a=0.7*(1-rg.r/maxR);
+    if(a<=0.02)continue;
+    ctx.globalAlpha=a;ctx.beginPath();ctx.arc(g.px0+rg.xm*g.ppm,ry,rg.r,0,Math.PI*2);ctx.stroke();
+  }
+  ctx.globalAlpha=1;ctx.restore();
+  /* track */
+  ctx.strokeStyle=col.track;ctx.lineWidth=3;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(g.px0,g.ty);ctx.lineTo(g.px1,g.ty);ctx.stroke();
+  ctx.lineWidth=1;ctx.fillStyle=col.muted;ctx.textAlign='center';setFont(11,true);
+  for(i=0;i<=L;i++){
+    var tx=g.px0+i*g.ppm;
+    ctx.strokeStyle=col.track;ctx.beginPath();ctx.moveTo(tx,g.ty+3);ctx.lineTo(tx,g.ty+(i===0||i===L?12:8));ctx.stroke();
+    ctx.fillText(i===0||i===L?i+' m':String(i),tx,g.ty+25);
+  }
+  /* phone */
+  ctx.fillStyle=col.ink;ctx.fillRect(g.px0-48,g.ty-42,24,46);
+  ctx.fillStyle=col.screen;ctx.fillRect(g.px0-45,g.ty-39,18,36);
+  ctx.fillStyle=col['screen-peak'];ctx.fillRect(g.px0-41,g.ty-22,10,2);ctx.fillRect(g.px0-38,g.ty-30,4,10);
+  ctx.fillStyle=col.muted;setFont(11,false);ctx.fillText('휴대폰',g.px0-36,g.ty+43);
+  /* cart */
+  ctx.fillStyle=col.ink;ctx.fillRect(cx-20,g.ty-24,40,14);
+  ctx.beginPath();ctx.arc(cx-12,g.ty-5,5,0,Math.PI*2);ctx.arc(cx+12,g.ty-5,5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=col.muted;ctx.fillRect(cx-9,g.ty-39,18,15);
+  ctx.fillStyle=col.stage;ctx.beginPath();ctx.arc(cx,g.ty-31.5,4,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=col.muted;setFont(11,false);ctx.fillText('스피커',cx,g.ty-45);
+  /* velocity arrow */
+  var r=S.run;
+  if(r&&r.type==='run'){
+    var sg=r.dir>0?1:-1,c=r.dir>0?col.recede:col.approach,ax=cx,ay=g.ty-68;
+    ctx.strokeStyle=c;ctx.fillStyle=c;ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(ax-sg*18,ay);ctx.lineTo(ax+sg*18,ay);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ax+sg*24,ay);ctx.lineTo(ax+sg*14,ay-5);ctx.lineTo(ax+sg*14,ay+5);ctx.closePath();ctx.fill();
+    setFont(11,true);ctx.fillText(r.vSet.toFixed(2)+' m/s',ax,ay-9);
+  }
+}
+function drawSpec(){
+  if(!sctx||!specW)return;
+  var w=specW,h=specH,lo=196,hi=204,pl=8,pr=8,pt=8,pb=18,f,i;
+  function X(q){return pl+(q-lo)/(hi-lo)*(w-pl-pr);}
+  sctx.clearRect(0,0,w,h);
+  sctx.fillStyle=col.screen;sctx.fillRect(0,0,w,h);
+  sctx.strokeStyle=col['screen-dim'];sctx.fillStyle=col['screen-dim'];sctx.lineWidth=1;sctx.font='10px "IBM Plex Mono",ui-monospace,monospace';sctx.textAlign='center';
+  for(f=lo;f<=hi;f++){
+    sctx.globalAlpha=0.22;sctx.beginPath();sctx.moveTo(X(f),pt);sctx.lineTo(X(f),h-pb);sctx.stroke();
+    sctx.globalAlpha=1;
+    if((f-lo)%2===0)sctx.fillText(String(f),X(f),h-5);
+  }
+  sctx.setLineDash([3,3]);sctx.globalAlpha=0.7;sctx.beginPath();sctx.moveTo(X(F0),pt);sctx.lineTo(X(F0),h-pb);sctx.stroke();
+  sctx.setLineDash([]);sctx.globalAlpha=1;
+  var fr=Math.max(lo,Math.min(hi,S.reading)),sg=Math.max(0.08,res()*0.5),base=h-pb,amp=(h-pb-pt)*0.92;
+  sctx.beginPath();sctx.moveTo(pl,base);
+  for(i=pl;i<=w-pr;i++){
+    var q=lo+(i-pl)/(w-pl-pr)*(hi-lo),y=base-amp*Math.exp(-Math.pow(q-fr,2)/(2*sg*sg));
+    sctx.lineTo(i,y);
+  }
+  sctx.lineTo(w-pr,base);sctx.closePath();
+  sctx.fillStyle=col['screen-peak'];sctx.globalAlpha=0.28;sctx.fill();sctx.globalAlpha=1;
+  sctx.strokeStyle=col['screen-peak'];sctx.lineWidth=1.5;sctx.stroke();
+}
+function sizeCanvases(){
+  var dpr=window.devicePixelRatio||1,w=Math.floor(stage.clientWidth-2),h;
+  if(w>50){
+    h=Math.round(Math.max(210,Math.min(280,w*0.36)));
+    if(w!==sceneW||h!==sceneH){
+      sceneW=w;sceneH=h;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.height=h+'px';
+      if(ctx)ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+  }
+  var sw=Math.floor(sc.clientWidth);
+  if(sw>50&&sw!==specW){
+    specW=sw;sc.width=Math.round(sw*dpr);sc.height=Math.round(specH*dpr);
+    if(sctx)sctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+}
+
+/* ---------- readouts ---------- */
+var last={};
+function setText(id,t){if(last[id]!==t){last[id]=t;$(id).textContent=t;}}
+function updateReadouts(){
+  var r=S.run;
+  setText('fReadout',S.reading.toFixed(decs(res())));
+  setText('appState',r?(r.type==='run'?'측정 중':'기준 측정 중'):'대기');
+  setText('watch',(r?r.t:S.watch).toFixed(2)+' s');
+  setText('pos',S.xm.toFixed(2)+' m');
+}
+
+/* ---------- control wiring ---------- */
+function getRate(){var v=$('rate').value;return v==='instant'?'instant':parseFloat(v);}
+function setBusy(b){
+  ['dirApp','dirRec','speed','baseBtn','batchBtn','clearBtn'].forEach(function(id){$(id).disabled=b;});
+  $('startBtn').textContent=b?'중단':'실험 시작';
+}
+function status(t){$('status').textContent=t;}
+function startRun(type){
+  if(S.run)return;
+  var r=type==='rest'?makeRun('rest',0,0):makeRun('run',S.dir,S.v);
+  S.xm=type==='rest'?L:(S.dir<0?L:0);S.vs=0;S.rings=[];S.emitAcc=0;
+  if(getRate()==='instant'){
+    var rec=runInstant(r);
+    refreshAll();status(describe(rec));
+  }else{
+    S.run=r;setBusy(true);
+    status(type==='rest'?'정지 상태에서 5초간 측정합니다.':'수레가 7 m를 이동하는 동안 측정합니다.');
+  }
+}
+function describe(rec){
+  if(rec.type==='rest')return '정지 상태 측정 완료: '+rec.f.toFixed(2)+' Hz';
+  return (rec.dir<0?'가까워짐':'멀어짐')+' '+sv(rec.v,2)+' m/s 측정 완료: '+rec.f.toFixed(2)+' Hz';
+}
+function batch(){
+  if(S.run)return;
+  var n=0;
+  runInstant(makeRun('rest',0,0));n++;
+  [0.3,0.6,1,1.5,2].forEach(function(v){[-1,1].forEach(function(d){runInstant(makeRun('run',d,v));n++;});});
+  S.xm=S.dir<0?L:0;S.rings=[];
+  refreshAll();status(n+'회 측정을 표에 추가했습니다.');
+}
+$('startBtn').addEventListener('click',function(){
+  if(S.run){S.run=null;S.vs=0;S.xm=S.dir<0?L:0;setBusy(false);status('측정을 중단했습니다. 기록은 저장되지 않았습니다.');return;}
+  startRun('run');
+});
+$('baseBtn').addEventListener('click',function(){startRun('rest');});
+$('batchBtn').addEventListener('click',batch);
+$('clearBtn').addEventListener('click',function(){
+  if(S.run)return;
+  S.recs=[];S.watch=0;refreshAll();status('표를 비웠습니다.');$('copybox').hidden=true;$('copyMsg').textContent='';
+});
+$('tableHost').addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('button[data-del]'):null;
+  if(!b||S.run)return;
+  var id=parseInt(b.getAttribute('data-del'),10);
+  S.recs=S.recs.filter(function(r){return r.id!==id;});
+  refreshAll();
+});
+function onDir(){
+  S.dir=$('dirRec').checked?1:-1;
+  if(!S.run){S.xm=S.dir<0?L:0;}
+  updateHint();
+}
+$('dirApp').addEventListener('change',onDir);
+$('dirRec').addEventListener('change',onDir);
+$('speed').addEventListener('input',function(){
+  S.v=parseFloat($('speed').value);$('speedVal').textContent=S.v.toFixed(2)+' m/s';updateHint();
+});
+['res','sigma','sigt'].forEach(function(id){$(id).addEventListener('change',updateHint);});
+$('theory').addEventListener('change',refreshAll);
+$('copyBtn').addEventListener('click',function(){
+  var txt=S.recs.length?tsv():'',msg=$('copyMsg'),box=$('copybox');
+  if(!txt){msg.textContent='복사할 측정값이 없습니다.';return;}
+  function fallback(){box.hidden=false;box.value=txt;box.focus();box.select();msg.textContent='아래 내용을 선택해 복사하세요.';}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(function(){box.hidden=true;msg.textContent='표를 복사했습니다.';},fallback);
+  }else fallback();
+});
+
+/* ---------- main loop ---------- */
+var lastTs=0;
+function frame(ts){
+  if(!lastTs)lastTs=ts;
+  var dt=Math.min(0.05,(ts-lastTs)/1000);lastTs=ts;
+  var r=S.run;
+  if(r){
+    var rate=getRate();
+    advance(r,dt*(rate==='instant'?12:rate),true);
+    if(r.done){var rec=finalize(r);setBusy(false);refreshAll();status(describe(rec));}
+  }else{
+    updateRings(dt);
+    S.idleAcc+=dt;
+    if(S.idleAcc>=0.2){S.idleAcc=0;S.reading=readFreq(0);}
+  }
+  draw();drawSpec();updateReadouts();
+  window.requestAnimationFrame(frame);
+}
+
+/* ---------- init ---------- */
+readColors();
+if(window.matchMedia){
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  if(mq.addEventListener)mq.addEventListener('change',readColors);
+}
+if(window.MutationObserver)new MutationObserver(readColors).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)$('rate').value='instant';
+if(window.ResizeObserver){
+  var ro=new ResizeObserver(function(){sizeCanvases();renderChart();});
+  ro.observe(stage);ro.observe($('chart'));
+}else{
+  window.addEventListener('resize',function(){sizeCanvases();renderChart();});
+}
+sizeCanvases();
+refreshAll();
+for(var warm=0;warm<120;warm++)updateRings(1/30);
+window.requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
